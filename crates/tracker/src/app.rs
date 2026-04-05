@@ -3,7 +3,7 @@
 use eframe::egui::{self, Color32, RichText, ScrollArea, Stroke, CornerRadius};
 use std::sync::{Arc, Mutex};
 
-const VERSION: &str = "0.1.0";
+const VERSION: &str = "0.1.1";
 const GITHUB_REPO: &str = "Dif-Eq/PoEGuide";
 
 use shared::data::{all_acts, Act};
@@ -847,6 +847,14 @@ impl eframe::App for GuideApp {
                                 self.config.save();
                             }
                         });
+
+                    // Version
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(12.0);
+                        ui.label(RichText::new(format!("v{VERSION}")).color(TEXT_DONE).size(11.0));
+                    });
+                    ui.add_space(8.0);
 
                 } else {
                 let act_idx = self.selected_act.min(self.acts.len().saturating_sub(1));
