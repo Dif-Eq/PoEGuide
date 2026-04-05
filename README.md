@@ -1,3 +1,6 @@
+A tracker UI with optional overlay for the Path of Exile 2 campaign guide written here: https://www.poe2wiki.net/wiki/Guide:Acts_quick_guide
+Path of Exile 1 support coming soon.
+
 ## Structure
 
 ```
