@@ -1,0 +1,18 @@
+# Rust build output
+/target/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Windows artifacts
+*.pdb
+Thumbs.db
+Desktop.ini
+
+# Update script left by auto-updater
+update.bat
+tracker_new.exe
+overlay_new.exe
