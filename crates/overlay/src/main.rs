@@ -25,6 +25,33 @@ pub(crate) fn set_passthrough(title: &str) {
 }
 
 fn main() -> eframe::Result<()> {
+    // Refuse to start if the tracker isn't running — this executable is only
+    // meant to be launched via the "Open Overlay" button in the tracker UI.
+    #[cfg(target_os = "windows")]
+    {
+        use windows::{
+            core::w,
+            Win32::{
+                Foundation::HWND,
+                System::Threading::{OpenMutexW, SYNCHRONIZATION_ACCESS_RIGHTS},
+                UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK},
+            },
+        };
+        // SYNCHRONIZE = 0x00100000 — minimum access needed to open an existing mutex
+        let handle = unsafe { OpenMutexW(SYNCHRONIZATION_ACCESS_RIGHTS(0x00100000), false, w!("Local\\PoE2GuideTracker")) };
+        if handle.is_err() {
+            unsafe {
+                MessageBoxW(
+                    HWND(std::ptr::null_mut()),
+                    w!("Please launch the overlay using the 'Open Overlay' button in the PoE2 Campaign Guide tracker."),
+                    w!("PoE2 Overlay"),
+                    MB_OK | MB_ICONINFORMATION,
+                );
+            }
+            return Ok(());
+        }
+    }
+
     let config = shared::config::Config::load();
 
     let options = eframe::NativeOptions {
