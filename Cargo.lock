@@ -2310,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "overlay"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "dirs",
  "eframe",
@@ -3259,7 +3259,7 @@ dependencies = [
 
 [[package]]
 name = "tracker"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "dirs",
  "eframe",
