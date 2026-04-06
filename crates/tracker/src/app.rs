@@ -6,6 +6,10 @@ use std::sync::{Arc, Mutex};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GITHUB_REPO: &str = "Dif-Eq/PoEGuide";
 
+/// Logical size of the overlay window (must match overlay/src/main.rs with_inner_size).
+const OVERLAY_W: f32 = 420.0;
+const OVERLAY_H: f32 = 300.0;
+
 use shared::data::{all_acts, Act};
 use shared::save::SaveState;
 
@@ -776,9 +780,28 @@ impl eframe::App for GuideApp {
                                 .color(TEXT_DIM).size(11.0));
                             ui.add_space(8.0);
 
-                            // Get actual monitor size for accurate scaling
+                            // Get actual monitor size in logical pixels for accurate scaling.
+                            // egui's viewport().monitor_size can return None on some systems
+                            // (e.g. 4K monitors), so fall back to the Win32 API on Windows.
                             let monitor_size = ctx.input(|i| i.viewport().monitor_size)
-                                .unwrap_or(egui::vec2(1920.0, 1080.0));
+                                .unwrap_or_else(|| {
+                                    #[cfg(target_os = "windows")]
+                                    {
+                                        use windows::Win32::UI::WindowsAndMessaging::{
+                                            GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN,
+                                        };
+                                        let ppp = ctx.pixels_per_point();
+                                        let w = unsafe { GetSystemMetrics(SM_CXSCREEN) } as f32 / ppp;
+                                        let h = unsafe { GetSystemMetrics(SM_CYSCREEN) } as f32 / ppp;
+                                        if w > 0.0 && h > 0.0 {
+                                            egui::vec2(w, h)
+                                        } else {
+                                            egui::vec2(1920.0, 1080.0)
+                                        }
+                                    }
+                                    #[cfg(not(target_os = "windows"))]
+                                    egui::vec2(1920.0, 1080.0)
+                                });
 
                             // Preview area — maintain monitor aspect ratio
                             let preview_w = 320.0_f32;
@@ -796,8 +819,8 @@ impl eframe::App for GuideApp {
                                 Stroke::new(1.0, Color32::from_rgb(60, 70, 85)), egui::StrokeKind::Outside);
 
                             // Overlay box size scaled to match actual overlay size vs monitor
-                            let box_w = 420.0 * scale;
-                            let box_h = 300.0 * scale;
+                            let box_w = OVERLAY_W * scale;
+                            let box_h = OVERLAY_H * scale;
 
                             // Current position in preview space
                             let bx = screen_rect.min.x + self.config.overlay_x * scale;
@@ -837,9 +860,9 @@ impl eframe::App for GuideApp {
                                 let delta = box_resp.drag_delta();
                                 // Convert preview delta back to real pixel delta
                                 let new_x = (self.config.overlay_x + delta.x / scale)
-                                    .clamp(0.0, monitor_size.x - 420.0);
+                                    .clamp(0.0, monitor_size.x - OVERLAY_W);
                                 let new_y = (self.config.overlay_y + delta.y / scale)
-                                    .clamp(0.0, monitor_size.y - 300.0);
+                                    .clamp(0.0, monitor_size.y - OVERLAY_H);
                                 self.config.overlay_x = new_x;
                                 self.config.overlay_y = new_y;
                             }
