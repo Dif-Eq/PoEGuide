@@ -2,8 +2,10 @@
 
 mod app;
 
+/// Ensures the overlay window has WS_EX_LAYERED | WS_EX_TRANSPARENT so it stays
+/// click-through. Safe to call repeatedly — it's idempotent (OR-assigns the flags).
 #[cfg(target_os = "windows")]
-fn set_passthrough(title: &str) {
+pub(crate) fn set_passthrough(title: &str) {
     use windows::Win32::UI::WindowsAndMessaging::{
         FindWindowW, GetWindowLongW, SetWindowLongW,
         GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TRANSPARENT,
@@ -38,10 +40,10 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
 
-    // Spawn a thread to apply passthrough style shortly after the window is created
+    // Apply passthrough style shortly after the window is created.
+    // The app also re-applies it periodically in case the OS resets the flags.
     #[cfg(target_os = "windows")]
     std::thread::spawn(|| {
-        // Give the window time to be created and registered with the OS
         std::thread::sleep(std::time::Duration::from_millis(500));
         set_passthrough("PoE2 Overlay");
     });
