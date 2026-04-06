@@ -4,6 +4,13 @@ mod app;
 mod icon;
 
 fn main() -> eframe::Result<()> {
+    // Hold a named mutex for our lifetime so the overlay can verify the tracker is running.
+    #[cfg(target_os = "windows")]
+    let _tracker_mutex = unsafe {
+        use windows::Win32::System::Threading::CreateMutexW;
+        use windows::core::w;
+        CreateMutexW(None, false, w!("Local\\PoE2GuideTracker")).ok()
+    };
     let icon_data = egui::IconData {
         rgba: icon::ICON_RGBA.to_vec(),
         width: icon::ICON_WIDTH,
