@@ -492,16 +492,19 @@ impl eframe::App for GuideApp {
 
                 // Bottom: reset + settings buttons
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                    ui.add_space(10.0);
+                    ui.add_space(16.0);
                     ui.horizontal(|ui| {
                         ui.add_space(12.0);
+                        ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);
+                        ui.spacing_mut().item_spacing.x = 8.0;
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new("Reset Act").color(TEXT_DIM).size(11.0),
+                                    RichText::new("Reset Act").color(TEXT_MAIN).size(13.0),
                                 )
-                                .fill(BG_PANEL)
-                                .stroke(Stroke::new(1.0, CRIMSON)),
+                                .fill(CRIMSON)
+                                .stroke(Stroke::NONE)
+                                .min_size(egui::vec2(0.0, 28.0)),
                             )
                             .on_hover_text("Clear all checkboxes for this act")
                             .clicked()
@@ -510,15 +513,15 @@ impl eframe::App for GuideApp {
                             self.state.reset_act(self.selected_act, act);
                             self.dirty = true;
                         }
-                        ui.add_space(4.0);
                         let settings_label = if self.show_settings { "< Back" } else { "Settings" };
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new(settings_label).color(TEXT_DIM).size(11.0),
+                                    RichText::new(settings_label).color(TEXT_MAIN).size(13.0),
                                 )
-                                .fill(BG_PANEL)
-                                .stroke(Stroke::new(1.0, ACCENT_GOLD_DIM)),
+                                .fill(ACCENT_GOLD_DIM)
+                                .stroke(Stroke::NONE)
+                                .min_size(egui::vec2(0.0, 28.0)),
                             )
                             .clicked()
                         {
@@ -531,22 +534,24 @@ impl eframe::App for GuideApp {
                             }
                         }
                     });
-                    ui.add_space(4.0);
+                    ui.add_space(14.0);
                     ui.horizontal(|ui| {
                         ui.add_space(12.0);
+                        ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);
                         let overlay_running = self.overlay_running();
-                        let (overlay_label, overlay_color, overlay_stroke) = if overlay_running {
-                            ("Close Overlay", TEXT_DIM, Stroke::new(1.0, CRIMSON))
+                        let (overlay_label, overlay_fill) = if overlay_running {
+                            ("Close Overlay", CRIMSON)
                         } else {
-                            ("Open Overlay", TEXT_DIM, Stroke::new(1.0, ACCENT_GOLD_DIM))
+                            ("Open Overlay", ACCENT_GOLD_DIM)
                         };
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new(overlay_label).color(overlay_color).size(11.0),
+                                    RichText::new(overlay_label).color(TEXT_MAIN).size(13.0),
                                 )
-                                .fill(BG_PANEL)
-                                .stroke(overlay_stroke),
+                                .fill(overlay_fill)
+                                .stroke(Stroke::NONE)
+                                .min_size(egui::vec2(0.0, 28.0)),
                             )
                             .clicked()
                         {
