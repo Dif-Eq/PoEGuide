@@ -1,6 +1,11 @@
 A tracker UI with optional overlay for the Path of Exile 2 campaign guide written here: https://www.poe2wiki.net/wiki/Guide:Acts_quick_guide
 Path of Exile 1 support coming soon.
+
 This entire project was made using Claude AI. I don't know how to write anything in rust. I just like this UI library's features.
+
+## Download
+
+Pre-built Windows binaries are available on the [Releases page](https://github.com/Dif-Eq/PoEGuide/releases). Download the latest release — `tracker.exe` is the main app, and `overlay.exe` is optional if you want the in-game overlay. No installation required.
 
 ## Structure
 
