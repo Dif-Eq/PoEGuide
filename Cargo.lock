@@ -3269,6 +3269,7 @@ dependencies = [
  "serde_json",
  "shared",
  "ureq",
+ "windows",
  "winresource",
 ]
 
