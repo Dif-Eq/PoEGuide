@@ -8,7 +8,7 @@ use global_hotkey::{
 use shared::data::{all_acts, Act};
 use shared::save::SaveState;
 use shared::config::Config;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 // ─── Tag stripping ────────────────────────────────────────────────────────────
 
@@ -158,6 +158,12 @@ impl OverlayApp {
             if mtime != self.config_mtime {
                 self.reload_hotkeys();
             }
+
+            // Re-apply the click-through window style periodically.
+            // eframe/winit can silently reset WS_EX_TRANSPARENT during focus or DPI
+            // events; re-asserting it every ~30 frames keeps the overlay passthrough.
+            #[cfg(target_os = "windows")]
+            crate::set_passthrough("PoE2 Overlay");
         }
     }
 
@@ -226,7 +232,7 @@ impl eframe::App for OverlayApp {
             egui::CentralPanel::default()
                 .frame(egui::Frame::new().fill(Color32::TRANSPARENT))
                 .show(ctx, |_ui| {});
-            ctx.request_repaint();
+            ctx.request_repaint_after(Duration::from_millis(50));
             return;
         }
 
@@ -393,6 +399,8 @@ impl eframe::App for OverlayApp {
                     });
             });
 
-        ctx.request_repaint();
+        // ~20 fps — plenty for a step tracker and much lighter on resources than
+        // an uncapped repaint loop competing with a heavy game.
+        ctx.request_repaint_after(Duration::from_millis(50));
     }
 }
