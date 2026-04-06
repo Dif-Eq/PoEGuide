@@ -13,6 +13,64 @@ const OVERLAY_H: f32 = 300.0;
 use shared::data::{all_acts, Act};
 use shared::save::SaveState;
 
+// ─── Monitor enumeration ──────────────────────────────────────────────────────
+
+/// Returns the bounding rect of each monitor in logical pixels (origin = top-left of
+/// the primary monitor). Falls back to a single 1920×1080 rect if enumeration fails.
+#[cfg(target_os = "windows")]
+fn enumerate_monitors(pixels_per_point: f32) -> Vec<egui::Rect> {
+    use std::sync::Mutex as StdMutex;
+    use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, HMONITOR, HDC};
+    use windows::Win32::Foundation::{BOOL, LPARAM, RECT};
+
+    let monitors: std::sync::Arc<StdMutex<Vec<egui::Rect>>> =
+        std::sync::Arc::new(StdMutex::new(Vec::new()));
+    let monitors_ptr = std::sync::Arc::clone(&monitors);
+
+    unsafe extern "system" fn monitor_cb(
+        _hmon: HMONITOR,
+        _hdc: HDC,
+        lprect: *mut RECT,
+        lparam: LPARAM,
+    ) -> BOOL {
+        let monitors = &*(lparam.0 as *const StdMutex<Vec<egui::Rect>>);
+        if let (Ok(mut list), Some(rc)) = (monitors.lock(), lprect.as_ref()) {
+            // Store raw pixel coords; we'll convert after enumeration.
+            list.push(egui::Rect::from_min_max(
+                egui::pos2(rc.left as f32, rc.top as f32),
+                egui::pos2(rc.right as f32, rc.bottom as f32),
+            ));
+        }
+        BOOL(1)
+    }
+
+    unsafe {
+        let ptr = std::sync::Arc::as_ptr(&monitors_ptr) as isize;
+        let _ = EnumDisplayMonitors(HDC::default(), None, Some(monitor_cb), LPARAM(ptr));
+    }
+
+    let raw = monitors.lock().unwrap().clone();
+    if raw.is_empty() {
+        return vec![egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1920.0, 1080.0))];
+    }
+
+    // Convert physical pixels → logical pixels and normalize so the virtual
+    // origin is at (0, 0) — matching how overlay_x/overlay_y are stored.
+    let min_x = raw.iter().map(|r| r.min.x).fold(f32::INFINITY, f32::min);
+    let min_y = raw.iter().map(|r| r.min.y).fold(f32::INFINITY, f32::min);
+    raw.iter().map(|r| {
+        egui::Rect::from_min_max(
+            egui::pos2((r.min.x - min_x) / pixels_per_point, (r.min.y - min_y) / pixels_per_point),
+            egui::pos2((r.max.x - min_x) / pixels_per_point, (r.max.y - min_y) / pixels_per_point),
+        )
+    }).collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn enumerate_monitors(_pixels_per_point: f32) -> Vec<egui::Rect> {
+    vec![egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1920.0, 1080.0))]
+}
+
 // ─── Inline tag parser ────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -434,16 +492,19 @@ impl eframe::App for GuideApp {
 
                 // Bottom: reset + settings buttons
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                    ui.add_space(10.0);
+                    ui.add_space(16.0);
                     ui.horizontal(|ui| {
                         ui.add_space(12.0);
+                        ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);
+                        ui.spacing_mut().item_spacing.x = 8.0;
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new("Reset Act").color(TEXT_DIM).size(11.0),
+                                    RichText::new("Reset Act").color(TEXT_MAIN).size(13.0),
                                 )
-                                .fill(BG_PANEL)
-                                .stroke(Stroke::new(1.0, CRIMSON)),
+                                .fill(CRIMSON)
+                                .stroke(Stroke::NONE)
+                                .min_size(egui::vec2(0.0, 28.0)),
                             )
                             .on_hover_text("Clear all checkboxes for this act")
                             .clicked()
@@ -452,15 +513,15 @@ impl eframe::App for GuideApp {
                             self.state.reset_act(self.selected_act, act);
                             self.dirty = true;
                         }
-                        ui.add_space(4.0);
                         let settings_label = if self.show_settings { "< Back" } else { "Settings" };
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new(settings_label).color(TEXT_DIM).size(11.0),
+                                    RichText::new(settings_label).color(TEXT_MAIN).size(13.0),
                                 )
-                                .fill(BG_PANEL)
-                                .stroke(Stroke::new(1.0, ACCENT_GOLD_DIM)),
+                                .fill(ACCENT_GOLD_DIM)
+                                .stroke(Stroke::NONE)
+                                .min_size(egui::vec2(0.0, 28.0)),
                             )
                             .clicked()
                         {
@@ -473,22 +534,24 @@ impl eframe::App for GuideApp {
                             }
                         }
                     });
-                    ui.add_space(4.0);
+                    ui.add_space(14.0);
                     ui.horizontal(|ui| {
                         ui.add_space(12.0);
+                        ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);
                         let overlay_running = self.overlay_running();
-                        let (overlay_label, overlay_color, overlay_stroke) = if overlay_running {
-                            ("Close Overlay", TEXT_DIM, Stroke::new(1.0, CRIMSON))
+                        let (overlay_label, overlay_fill) = if overlay_running {
+                            ("Close Overlay", CRIMSON)
                         } else {
-                            ("Open Overlay", TEXT_DIM, Stroke::new(1.0, ACCENT_GOLD_DIM))
+                            ("Open Overlay", ACCENT_GOLD_DIM)
                         };
                         if ui
                             .add(
                                 egui::Button::new(
-                                    RichText::new(overlay_label).color(overlay_color).size(11.0),
+                                    RichText::new(overlay_label).color(TEXT_MAIN).size(13.0),
                                 )
-                                .fill(BG_PANEL)
-                                .stroke(overlay_stroke),
+                                .fill(overlay_fill)
+                                .stroke(Stroke::NONE)
+                                .min_size(egui::vec2(0.0, 28.0)),
                             )
                             .clicked()
                         {
@@ -780,51 +843,57 @@ impl eframe::App for GuideApp {
                                 .color(TEXT_DIM).size(11.0));
                             ui.add_space(8.0);
 
-                            // Get actual monitor size in logical pixels for accurate scaling.
-                            // egui's viewport().monitor_size can return None on some systems
-                            // (e.g. 4K monitors), so fall back to the Win32 API on Windows.
-                            let monitor_size = ctx.input(|i| i.viewport().monitor_size)
-                                .unwrap_or_else(|| {
-                                    #[cfg(target_os = "windows")]
-                                    {
-                                        use windows::Win32::UI::WindowsAndMessaging::{
-                                            GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN,
-                                        };
-                                        let ppp = ctx.pixels_per_point();
-                                        let w = unsafe { GetSystemMetrics(SM_CXSCREEN) } as f32 / ppp;
-                                        let h = unsafe { GetSystemMetrics(SM_CYSCREEN) } as f32 / ppp;
-                                        if w > 0.0 && h > 0.0 {
-                                            egui::vec2(w, h)
-                                        } else {
-                                            egui::vec2(1920.0, 1080.0)
-                                        }
-                                    }
-                                    #[cfg(not(target_os = "windows"))]
-                                    egui::vec2(1920.0, 1080.0)
-                                });
+                            // Enumerate all monitors in logical pixels.
+                            let monitors = enumerate_monitors(ctx.pixels_per_point());
 
-                            // Preview area — maintain monitor aspect ratio
+                            // Virtual bounding box across all monitors.
+                            let virt_min_x = monitors.iter().map(|r| r.min.x).fold(f32::INFINITY, f32::min);
+                            let virt_min_y = monitors.iter().map(|r| r.min.y).fold(f32::INFINITY, f32::min);
+                            let virt_max_x = monitors.iter().map(|r| r.max.x).fold(f32::NEG_INFINITY, f32::max);
+                            let virt_max_y = monitors.iter().map(|r| r.max.y).fold(f32::NEG_INFINITY, f32::max);
+                            let virt_w = virt_max_x - virt_min_x;
+                            let virt_h = virt_max_y - virt_min_y;
+
+                            // Preview area — maintain virtual desktop aspect ratio.
                             let preview_w = 320.0_f32;
-                            let preview_h = preview_w * (monitor_size.y / monitor_size.x);
-                            let scale = preview_w / monitor_size.x;
+                            let preview_h = preview_w * (virt_h / virt_w);
+                            let scale = preview_w / virt_w;
 
-                            let (screen_rect, _) = ui.allocate_exact_size(
+                            let (preview_rect, _) = ui.allocate_exact_size(
                                 egui::vec2(preview_w, preview_h),
                                 egui::Sense::hover(),
                             );
 
-                            // Screen background
-                            ui.painter().rect_filled(screen_rect, 4.0, Color32::from_rgb(8, 10, 14));
-                            ui.painter().rect_stroke(screen_rect, 4.0,
-                                Stroke::new(1.0, Color32::from_rgb(60, 70, 85)), egui::StrokeKind::Outside);
+                            // Draw each monitor as a dark rect with a border.
+                            for (i, mon) in monitors.iter().enumerate() {
+                                let mon_rect = egui::Rect::from_min_max(
+                                    egui::pos2(
+                                        preview_rect.min.x + (mon.min.x - virt_min_x) * scale,
+                                        preview_rect.min.y + (mon.min.y - virt_min_y) * scale,
+                                    ),
+                                    egui::pos2(
+                                        preview_rect.min.x + (mon.max.x - virt_min_x) * scale,
+                                        preview_rect.min.y + (mon.max.y - virt_min_y) * scale,
+                                    ),
+                                );
+                                ui.painter().rect_filled(mon_rect, 4.0, Color32::from_rgb(8, 10, 14));
+                                ui.painter().rect_stroke(mon_rect, 4.0,
+                                    Stroke::new(1.0, Color32::from_rgb(60, 70, 85)), egui::StrokeKind::Outside);
+                                // Label each monitor by number.
+                                ui.painter().text(
+                                    mon_rect.center(),
+                                    egui::Align2::CENTER_CENTER,
+                                    format!("{}", i + 1),
+                                    egui::FontId::proportional(10.0),
+                                    Color32::from_rgb(50, 60, 75),
+                                );
+                            }
 
-                            // Overlay box size scaled to match actual overlay size vs monitor
+                            // Overlay box.
                             let box_w = OVERLAY_W * scale;
                             let box_h = OVERLAY_H * scale;
-
-                            // Current position in preview space
-                            let bx = screen_rect.min.x + self.config.overlay_x * scale;
-                            let by = screen_rect.min.y + self.config.overlay_y * scale;
+                            let bx = preview_rect.min.x + (self.config.overlay_x - virt_min_x) * scale;
+                            let by = preview_rect.min.y + (self.config.overlay_y - virt_min_y) * scale;
                             let box_rect = egui::Rect::from_min_size(
                                 egui::pos2(bx, by),
                                 egui::vec2(box_w, box_h),
@@ -850,7 +919,7 @@ impl eframe::App for GuideApp {
                                 TEXT_DIM,
                             );
 
-                            // Show current pixel position
+                            // Show current pixel position.
                             ui.add_space(4.0);
                             ui.label(RichText::new(
                                 format!("x: {:.0}  y: {:.0}", self.config.overlay_x, self.config.overlay_y))
@@ -858,11 +927,10 @@ impl eframe::App for GuideApp {
 
                             if box_resp.dragged() {
                                 let delta = box_resp.drag_delta();
-                                // Convert preview delta back to real pixel delta
                                 let new_x = (self.config.overlay_x + delta.x / scale)
-                                    .clamp(0.0, monitor_size.x - OVERLAY_W);
+                                    .clamp(virt_min_x, virt_max_x - OVERLAY_W);
                                 let new_y = (self.config.overlay_y + delta.y / scale)
-                                    .clamp(0.0, monitor_size.y - OVERLAY_H);
+                                    .clamp(virt_min_y, virt_max_y - OVERLAY_H);
                                 self.config.overlay_x = new_x;
                                 self.config.overlay_y = new_y;
                             }
