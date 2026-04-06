@@ -3,7 +3,7 @@
 use eframe::egui::{self, Color32, RichText, ScrollArea, Stroke, CornerRadius};
 use std::sync::{Arc, Mutex};
 
-const VERSION: &str = "0.1.1";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GITHUB_REPO: &str = "Dif-Eq/PoEGuide";
 
 use shared::data::{all_acts, Act};
