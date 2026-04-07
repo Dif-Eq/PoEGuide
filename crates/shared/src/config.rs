@@ -38,6 +38,14 @@ pub struct Config {
     /// Overlay position in absolute screen pixels
     pub overlay_x:       f32,
     pub overlay_y:       f32,
+    /// UI scale multiplier applied on top of the OS DPI scale.
+    /// Valid values: 0.75, 1.0, 1.25, 1.5
+    #[serde(default = "Config::default_ui_scale")]
+    pub ui_scale:        f32,
+}
+
+impl Config {
+    fn default_ui_scale() -> f32 { 1.0 }
 }
 
 impl Default for Config {
@@ -49,6 +57,7 @@ impl Default for Config {
             opacity:    0.85,
             overlay_x:  0.0,
             overlay_y:  0.0,
+            ui_scale:   1.0,
         }
     }
 }
