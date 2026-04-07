@@ -173,6 +173,8 @@ pub struct GuideApp {
     update_available: Arc<Mutex<Option<Option<String>>>>,
     /// Whether an update is currently being downloaded
     update_downloading: bool,
+    /// OS DPI pixels-per-point captured on first frame, used as the base for ui_scale.
+    base_ppp: f32,
 }
 
 impl GuideApp {
@@ -197,6 +199,7 @@ impl GuideApp {
             overlay_process: None,
             update_available,
             update_downloading: false,
+            base_ppp: 0.0,
         }
     }
 
@@ -345,6 +348,12 @@ const CB_CHECK_MARK: Color32 = Color32::from_rgb(210, 185, 95); // gold checkmar
 impl eframe::App for GuideApp {
     #[allow(clippy::too_many_lines)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Capture OS DPI on first frame, then apply user scale on top of it.
+        if self.base_ppp == 0.0 {
+            self.base_ppp = ctx.pixels_per_point();
+        }
+        ctx.set_pixels_per_point(self.base_ppp * self.config.ui_scale);
+
         // Auto-save when dirty, otherwise poll for external changes (e.g. overlay advancing steps)
         if self.dirty {
             self.state.save();
@@ -712,9 +721,7 @@ impl eframe::App for GuideApp {
                                 .color(TEXT_DIM).size(11.0));
                         });
 
-                    ui.add_space(12.0);
-
-                    // Capture key input when rebinding
+                    // Capture key input when rebinding (logic only — no UI, keep outside scroll)
                     if self.rebinding.is_some() {
                         ctx.input(|i| {
                             let ctrl  = i.modifiers.ctrl;
@@ -753,6 +760,12 @@ impl eframe::App for GuideApp {
                             }
                         });
                     }
+
+                    ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .drag_to_scroll(false)
+                        .show(ui, |ui| {
+                    ui.add_space(12.0);
 
                     let bindings = [
                         (0usize, "Advance (next step)",   self.config.hotkey_advance.display()),
@@ -827,6 +840,44 @@ impl eframe::App for GuideApp {
                             });
                         });
 
+                    // ── UI Scale ─────────────────────────────────────────
+                    egui::Frame::new()
+                        .fill(BG_ZONE)
+                        .corner_radius(CornerRadius::same(4))
+                        .stroke(Stroke::new(1.0, Color32::from_rgb(40, 50, 62)))
+                        .outer_margin(egui::Margin { left: 12, right: 12, top: 0, bottom: 4 })
+                        .inner_margin(egui::Margin { left: 16, right: 16, top: 10, bottom: 10 })
+                        .show(ui, |ui| {
+                            ui.set_min_width(ui.available_width());
+                            ui.label(RichText::new("UI Scale").color(TEXT_MAIN).size(13.0));
+                            ui.add_space(2.0);
+                            ui.label(RichText::new("Scales both the tracker and overlay.")
+                                .color(TEXT_DIM).size(11.0));
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                for (label, value) in [("75%", 0.75_f32), ("100%", 1.0), ("125%", 1.25), ("150%", 1.5)] {
+                                    let selected = (self.config.ui_scale - value).abs() < 0.01;
+                                    let fill = if selected { ACCENT_GOLD_DIM } else { BG_PANEL };
+                                    let stroke = if selected {
+                                        Stroke::new(1.5, ACCENT_GOLD)
+                                    } else {
+                                        Stroke::new(1.0, ACCENT_GOLD_DIM)
+                                    };
+                                    let text_color = if selected { ACCENT_GOLD } else { TEXT_DIM };
+                                    if ui.add(
+                                        egui::Button::new(RichText::new(label).color(text_color).size(13.0))
+                                            .fill(fill)
+                                            .stroke(stroke)
+                                            .min_size(egui::vec2(54.0, 28.0)),
+                                    ).clicked() && !selected {
+                                        self.config.ui_scale = value;
+                                        self.config.save();
+                                    }
+                                }
+                            });
+                        });
+
                     // ── Position picker ───────────────────────────────────
                     egui::Frame::new()
                         .fill(BG_ZONE)
@@ -839,12 +890,13 @@ impl eframe::App for GuideApp {
                             ui.set_max_width(ui.available_width());
                             ui.label(RichText::new("Overlay Position").color(TEXT_MAIN).size(13.0));
                             ui.add_space(2.0);
-                            ui.label(RichText::new("Drag the box to set where the overlay appears on screen.")
+                            ui.label(RichText::new("Drag the box to position the overlay. Hold Ctrl while dragging to snap to screen edges.")
                                 .color(TEXT_DIM).size(11.0));
                             ui.add_space(8.0);
 
                             // Enumerate all monitors in logical pixels.
-                            let monitors = enumerate_monitors(ctx.pixels_per_point());
+                            // Use base_ppp (OS DPI) — overlay_x/y are stored in those units.
+                            let monitors = enumerate_monitors(self.base_ppp);
 
                             // Virtual bounding box across all monitors.
                             let virt_min_x = monitors.iter().map(|r| r.min.x).fold(f32::INFINITY, f32::min);
@@ -889,9 +941,12 @@ impl eframe::App for GuideApp {
                                 );
                             }
 
-                            // Overlay box.
-                            let box_w = OVERLAY_W * scale;
-                            let box_h = OVERLAY_H * scale;
+                            // Overlay box — dimensions scale with ui_scale since the actual
+                            // overlay window is OVERLAY_W * ui_scale OS-logical pixels wide.
+                            let eff_w = OVERLAY_W * self.config.ui_scale;
+                            let eff_h = OVERLAY_H * self.config.ui_scale;
+                            let box_w = eff_w * scale;
+                            let box_h = eff_h * scale;
                             let bx = preview_rect.min.x + (self.config.overlay_x - virt_min_x) * scale;
                             let by = preview_rect.min.y + (self.config.overlay_y - virt_min_y) * scale;
                             let box_rect = egui::Rect::from_min_size(
@@ -902,8 +957,9 @@ impl eframe::App for GuideApp {
                             let box_id = ui.id().with("overlay_pos_box");
                             let box_resp = ui.interact(box_rect, box_id, egui::Sense::drag());
 
+                            let ctrl_held = ctx.input(|i| i.modifiers.ctrl);
                             let box_color = if box_resp.hovered() || box_resp.dragged() {
-                                ACCENT_GOLD
+                                if ctrl_held { Color32::from_rgb(100, 200, 255) } else { ACCENT_GOLD }
                             } else {
                                 CRIMSON
                             };
@@ -927,10 +983,39 @@ impl eframe::App for GuideApp {
 
                             if box_resp.dragged() {
                                 let delta = box_resp.drag_delta();
-                                let new_x = (self.config.overlay_x + delta.x / scale)
-                                    .clamp(virt_min_x, virt_max_x - OVERLAY_W);
-                                let new_y = (self.config.overlay_y + delta.y / scale)
-                                    .clamp(virt_min_y, virt_max_y - OVERLAY_H);
+                                let mut new_x = (self.config.overlay_x + delta.x / scale)
+                                    .clamp(virt_min_x, virt_max_x - eff_w);
+                                let mut new_y = (self.config.overlay_y + delta.y / scale)
+                                    .clamp(virt_min_y, virt_max_y - eff_h);
+
+                                if ctrl_held {
+                                    // Snap to the nearest monitor edge within threshold.
+                                    // Find the best X and Y candidates independently so
+                                    // adjacent-monitor edges don't conflict.
+                                    let threshold = 30.0_f32; // OS-logical pixels
+                                    let mut best_x: Option<f32> = None;
+                                    let mut best_x_dist = threshold;
+                                    let mut best_y: Option<f32> = None;
+                                    let mut best_y_dist = threshold;
+
+                                    for mon in &monitors {
+                                        for &ex in &[mon.min.x, mon.max.x] {
+                                            let d = (new_x - ex).abs();
+                                            if d < best_x_dist { best_x_dist = d; best_x = Some(ex); }
+                                            let d = (new_x + eff_w - ex).abs();
+                                            if d < best_x_dist { best_x_dist = d; best_x = Some(ex - eff_w); }
+                                        }
+                                        for &ey in &[mon.min.y, mon.max.y] {
+                                            let d = (new_y - ey).abs();
+                                            if d < best_y_dist { best_y_dist = d; best_y = Some(ey); }
+                                            let d = (new_y + eff_h - ey).abs();
+                                            if d < best_y_dist { best_y_dist = d; best_y = Some(ey - eff_h); }
+                                        }
+                                    }
+                                    if let Some(sx) = best_x { new_x = sx; }
+                                    if let Some(sy) = best_y { new_y = sy; }
+                                }
+
                                 self.config.overlay_x = new_x;
                                 self.config.overlay_y = new_y;
                             }
@@ -946,6 +1031,8 @@ impl eframe::App for GuideApp {
                         ui.label(RichText::new(format!("v{VERSION}")).color(TEXT_DONE).size(11.0));
                     });
                     ui.add_space(8.0);
+
+                    }); // end ScrollArea (settings)
 
                 } else {
                 let act_idx = self.selected_act.min(self.acts.len().saturating_sub(1));

@@ -85,6 +85,7 @@ pub struct OverlayApp {
     manager:          GlobalHotKeyManager,
     hotkey_ids:        Option<HotkeyIds>,
     config_mtime:      Option<SystemTime>,
+    /// Triggers a window resize + reposition on the next frame (set on init and config reload).
     pending_reposition: bool,
 }
 
@@ -104,7 +105,7 @@ impl OverlayApp {
             manager,
             hotkey_ids,
             config_mtime,
-            pending_reposition: false,
+            pending_reposition: true,
         }
     }
 
@@ -225,9 +226,6 @@ impl eframe::App for OverlayApp {
         self.poll();
         self.process_hotkeys();
 
-        // Scroll opacity removed — overlay is click/scroll passthrough
-        // Opacity can be adjusted via config if needed in future
-
         if !self.visible {
             egui::CentralPanel::default()
                 .frame(egui::Frame::new().fill(Color32::TRANSPARENT))
@@ -236,17 +234,25 @@ impl eframe::App for OverlayApp {
             return;
         }
 
+        // Font sizes scaled from base values. No ppp manipulation — we resize the
+        // window directly and scale font sizes to match.
+        let s = self.config.ui_scale;
+
         let mut style = (*ctx.style()).clone();
         style.visuals.override_text_color = Some(TEXT_MAIN);
         style.visuals.window_fill = Color32::TRANSPARENT;
         style.visuals.panel_fill  = Color32::TRANSPARENT;
-        style.spacing.item_spacing = egui::vec2(0.0, 4.0);
+        style.spacing.item_spacing = egui::vec2(0.0, 4.0 * s);
         ctx.set_style(style);
 
-        // Position is set at startup via with_position() in main.rs
-        // and updated here whenever config changes
+        // Resize window and reposition whenever config changes (or on first frame).
+        // InnerSize and OuterPosition are in egui points which, without any custom
+        // pixels_per_point, equal OS-logical pixels — so these values are correct.
         if self.pending_reposition {
             self.pending_reposition = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                egui::vec2(420.0 * s, 300.0 * s)
+            ));
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                 egui::pos2(self.config.overlay_x, self.config.overlay_y)
             ));
@@ -275,7 +281,7 @@ impl eframe::App for OverlayApp {
                         let header_resp = egui::Frame::new()
                             .fill(header_bg)
                             .corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 })
-                            .inner_margin(egui::Margin { left: 10, right: 10, top: 6, bottom: 6 })
+                            .inner_margin(egui::Margin { left: (10.0 * s) as i8, right: (10.0 * s) as i8, top: (6.0 * s) as i8, bottom: (6.0 * s) as i8 })
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
                                 ui.horizontal(|ui| {
@@ -286,7 +292,7 @@ impl eframe::App for OverlayApp {
                                     ui.label(
                                         RichText::new(act_name)
                                             .color(ACCENT_GOLD)
-                                            .size(13.0)
+                                            .size(13.0 * s)
                                             .strong(),
                                     );
 
@@ -298,7 +304,7 @@ impl eframe::App for OverlayApp {
                                         ui.label(
                                             RichText::new(format!("  {done}/{total}  ({:.0}%)", pct * 100.0))
                                                 .color(TEXT_DIM)
-                                                .size(10.0),
+                                                .size(10.0 * s),
                                         );
                                     }
 
@@ -308,7 +314,7 @@ impl eframe::App for OverlayApp {
                                                 format!("{advance_label} next  {undo_label} undo  {toggle_label} hide")
                                             )
                                             .color(TEXT_DONE)
-                                            .size(9.0),
+                                            .size(9.0 * s),
                                         );
                                     });
                                 });
@@ -318,8 +324,8 @@ impl eframe::App for OverlayApp {
                                     let (done, total) = self.state.act_progress(*ai, &self.acts[*ai]);
                                     #[allow(clippy::cast_precision_loss)]
                                     let pct = if total > 0 { done as f32 / total as f32 } else { 0.0 };
-                                    ui.add_space(4.0);
-                                    let desired = egui::vec2(ui.available_width(), 3.0);
+                                    ui.add_space(4.0 * s);
+                                    let desired = egui::vec2(ui.available_width(), 3.0 * s);
                                     let (_, bar_rect) = ui.allocate_space(desired);
                                     let progress_trough = Color32::from_rgba_unmultiplied(40, 30, 20, panel_alpha);
                                     let progress_fill   = Color32::from_rgba_unmultiplied(160, 30, 30, panel_alpha);
@@ -339,13 +345,13 @@ impl eframe::App for OverlayApp {
 
                         // ── Steps ─────────────────────────────────────────
                         egui::Frame::new()
-                            .inner_margin(egui::Margin { left: 10, right: 10, top: 6, bottom: 8 })
+                            .inner_margin(egui::Margin { left: (10.0 * s) as i8, right: (10.0 * s) as i8, top: (6.0 * s) as i8, bottom: (8.0 * s) as i8 })
                             .show(ui, |ui| {
                                 if next_steps.is_empty() {
                                     ui.label(
                                         RichText::new("All steps complete! Enjoy the endgame.")
                                             .color(ACCENT_GOLD)
-                                            .size(13.0),
+                                            .size(13.0 * s),
                                     );
                                 } else {
                                     for (idx, (ai, zi, si)) in next_steps.iter().enumerate() {
@@ -356,43 +362,43 @@ impl eframe::App for OverlayApp {
                                             egui::Frame::new()
                                                 .fill(STEP_HIGHLIGHT)
                                                 .corner_radius(CornerRadius::same(4))
-                                                .inner_margin(egui::Margin { left: 6, right: 6, top: 3, bottom: 3 })
+                                                .inner_margin(egui::Margin { left: (6.0 * s) as i8, right: (6.0 * s) as i8, top: (3.0 * s) as i8, bottom: (3.0 * s) as i8 })
                                                 .show(ui, |ui| {
                                                     ui.set_min_width(ui.available_width());
                                                     ui.horizontal_wrapped(|ui| {
                                                         ui.spacing_mut().item_spacing.x = 0.0;
                                                         ui.label(RichText::new("▶ ")
                                                             .color(Color32::from_rgb(80, 55, 10))
-                                                            .size(11.0));
+                                                            .size(11.0 * s));
                                                         let zone_name = self.acts[*ai].zones[*zi].name;
                                                         ui.label(RichText::new(format!("[{zone_name}]  "))
                                                             .color(Color32::from_rgb(60, 45, 10))
-                                                            .size(11.0));
+                                                            .size(11.0 * s));
                                                         ui.label(RichText::new(&step_text)
                                                             .color(TEXT_CURRENT)
-                                                            .size(14.0));
+                                                            .size(14.0 * s));
                                                     });
                                                 });
                                         } else {
                                             egui::Frame::new()
-                                                .inner_margin(egui::Margin { left: 6, right: 6, top: 2, bottom: 2 })
+                                                .inner_margin(egui::Margin { left: (6.0 * s) as i8, right: (6.0 * s) as i8, top: (2.0 * s) as i8, bottom: (2.0 * s) as i8 })
                                                 .show(ui, |ui| {
                                                     ui.set_min_width(ui.available_width());
                                                     ui.horizontal_wrapped(|ui| {
                                                         ui.spacing_mut().item_spacing.x = 0.0;
-                                                        ui.label(RichText::new("  ").size(11.0));
+                                                        ui.label(RichText::new("  ").size(11.0 * s));
                                                         let zone_name = self.acts[*ai].zones[*zi].name;
                                                         ui.label(RichText::new(format!("[{zone_name}]  "))
                                                             .color(TEXT_DONE)
-                                                            .size(10.0));
+                                                            .size(10.0 * s));
                                                         ui.label(RichText::new(&step_text)
                                                             .color(TEXT_DIM)
-                                                            .size(11.0));
+                                                            .size(11.0 * s));
                                                     });
                                                 });
                                         }
 
-                                        ui.add_space(2.0);
+                                        ui.add_space(2.0 * s);
                                     }
                                 }
                             });
