@@ -569,7 +569,7 @@ impl eframe::App for GuideApp {
                     ui.horizontal(|ui| {
                         ui.add_space(12.0);
                         ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);
-                        ui.spacing_mut().item_spacing.x = 8.0;
+                        ui.spacing_mut().item_spacing.x = 6.0;
                         if ui
                             .add(
                                 egui::Button::new(
