@@ -13,6 +13,37 @@ const OVERLAY_H: f32 = 300.0;
 use shared::data::{all_acts, Act};
 use shared::save::SaveState;
 
+// ─── Window resize helper ─────────────────────────────────────────────────────
+
+/// Resize the window to exactly `phys_w × phys_h` physical pixels (client area).
+/// Uses the Windows API directly to avoid ambiguity in egui/eframe's point-to-pixel
+/// conversion when a custom pixels_per_point is in effect.
+#[cfg(target_os = "windows")]
+fn resize_window_client(title: &str, phys_w: i32, phys_h: i32) {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, GetClientRect, GetWindowRect, SetWindowPos,
+        SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE,
+    };
+    let wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let Ok(hwnd) = FindWindowW(None, windows::core::PCWSTR(wide.as_ptr())) else { return };
+        let mut wr = RECT::default();
+        let mut cr = RECT::default();
+        let _ = GetWindowRect(hwnd, &mut wr);
+        let _ = GetClientRect(hwnd, &mut cr);
+        // Chrome = outer window dimensions minus client area dimensions.
+        let chrome_w = (wr.right - wr.left) - (cr.right - cr.left);
+        let chrome_h = (wr.bottom - wr.top) - (cr.bottom - cr.top);
+        let _ = SetWindowPos(
+            hwnd, HWND(std::ptr::null_mut()),
+            0, 0,
+            phys_w + chrome_w, phys_h + chrome_h,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+}
+
 // ─── Monitor enumeration ──────────────────────────────────────────────────────
 
 /// Returns the bounding rect of each monitor in logical pixels (origin = top-left of
@@ -175,6 +206,11 @@ pub struct GuideApp {
     update_downloading: bool,
     /// OS DPI pixels-per-point captured on first frame, used as the base for ui_scale.
     base_ppp: f32,
+    /// Triggers a one-shot window resize on the next frame when the user changes ui_scale.
+    pending_resize: bool,
+    /// Actual rendered overlay height in OS-logical pixels, written by the overlay to
+    /// overlay_h.txt and read here so the position picker can clamp/snap accurately.
+    overlay_content_h: f32,
 }
 
 impl GuideApp {
@@ -200,7 +236,17 @@ impl GuideApp {
             update_available,
             update_downloading: false,
             base_ppp: 0.0,
+            pending_resize: false,
+            overlay_content_h: Self::read_overlay_h(),
         }
+    }
+
+    fn read_overlay_h() -> f32 {
+        dirs::data_local_dir()
+            .and_then(|d| std::fs::read_to_string(d.join("poe2_guide").join("overlay_h.txt")).ok())
+            .and_then(|s| s.trim().parse::<f32>().ok())
+            .filter(|&h| h > 10.0)
+            .unwrap_or(0.0)
     }
 
     fn overlay_running(&mut self) -> bool {
@@ -354,6 +400,21 @@ impl eframe::App for GuideApp {
         }
         ctx.set_pixels_per_point(self.base_ppp * self.config.ui_scale);
 
+        // Resize window to match the new scale using the Windows API directly, avoiding
+        // ambiguity in how eframe converts egui points when a custom ppp is active.
+        // Physical pixels = base logical size × ui_scale × OS DPI factor (base_ppp).
+        // 100% → 860×680 logical, 75% → 645×510, 125% → 1075×850, 150% → 1290×1020.
+        if self.pending_resize && self.base_ppp > 0.0 {
+            self.pending_resize = false;
+            let s = self.config.ui_scale;
+            #[cfg(target_os = "windows")]
+            resize_window_client(
+                "PoE2 Campaign Guide",
+                (860.0 * s * self.base_ppp) as i32,
+                (680.0 * s * self.base_ppp) as i32,
+            );
+        }
+
         // Auto-save when dirty, otherwise poll for external changes (e.g. overlay advancing steps)
         if self.dirty {
             self.state.save();
@@ -363,6 +424,9 @@ impl eframe::App for GuideApp {
             if self.frame_counter >= 6 {
                 self.frame_counter = 0;
                 self.state = SaveState::load();
+                // Refresh overlay height in case the overlay just started and wrote it
+                let h = Self::read_overlay_h();
+                if h > 10.0 { self.overlay_content_h = h; }
             }
         }
 
@@ -873,6 +937,7 @@ impl eframe::App for GuideApp {
                                     ).clicked() && !selected {
                                         self.config.ui_scale = value;
                                         self.config.save();
+                                        self.pending_resize = true;
                                     }
                                 }
                             });
@@ -941,10 +1006,15 @@ impl eframe::App for GuideApp {
                                 );
                             }
 
-                            // Overlay box — dimensions scale with ui_scale since the actual
-                            // overlay window is OVERLAY_W * ui_scale OS-logical pixels wide.
+                            // Overlay box — width is hardcoded; height comes from the actual
+                            // rendered content written by the overlay to overlay_h.txt so the
+                            // box, clamp, and snap all reflect the real overlay footprint.
                             let eff_w = OVERLAY_W * self.config.ui_scale;
-                            let eff_h = OVERLAY_H * self.config.ui_scale;
+                            let eff_h = if self.overlay_content_h > 10.0 {
+                                self.overlay_content_h
+                            } else {
+                                OVERLAY_H * self.config.ui_scale
+                            };
                             let box_w = eff_w * scale;
                             let box_h = eff_h * scale;
                             let bx = preview_rect.min.x + (self.config.overlay_x - virt_min_x) * scale;

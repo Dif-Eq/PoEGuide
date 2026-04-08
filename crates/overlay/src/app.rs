@@ -87,6 +87,8 @@ pub struct OverlayApp {
     config_mtime:      Option<SystemTime>,
     /// Triggers a window resize + reposition on the next frame (set on init and config reload).
     pending_reposition: bool,
+    /// Last content height written to overlay_h.txt so the tracker picker can use the real size.
+    last_written_h: f32,
 }
 
 impl OverlayApp {
@@ -106,6 +108,7 @@ impl OverlayApp {
             hotkey_ids,
             config_mtime,
             pending_reposition: true,
+            last_written_h: 0.0,
         }
     }
 
@@ -245,14 +248,11 @@ impl eframe::App for OverlayApp {
         style.spacing.item_spacing = egui::vec2(0.0, 4.0 * s);
         ctx.set_style(style);
 
-        // Resize window and reposition whenever config changes (or on first frame).
-        // InnerSize and OuterPosition are in egui points which, without any custom
-        // pixels_per_point, equal OS-logical pixels — so these values are correct.
+        // Reposition whenever config changes (or on first frame).
+        // OuterPosition is in egui points which, without any custom pixels_per_point,
+        // equal OS-logical pixels — so these values are correct.
         if self.pending_reposition {
             self.pending_reposition = false;
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                egui::vec2(420.0 * s, 300.0 * s)
-            ));
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                 egui::pos2(self.config.overlay_x, self.config.overlay_y)
             ));
@@ -271,7 +271,7 @@ impl eframe::App for OverlayApp {
                 let bg         = Color32::from_rgba_unmultiplied(18, 22, 28, panel_alpha);
                 let header_bg  = Color32::from_rgba_unmultiplied(12, 15, 20, panel_alpha);
 
-                egui::Frame::new()
+                let content_frame = egui::Frame::new()
                     .fill(bg)
                     .corner_radius(CornerRadius::same(8))
                     .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(160, 30, 30, panel_alpha)))
@@ -403,6 +403,26 @@ impl eframe::App for OverlayApp {
                                 }
                             });
                     });
+
+                // Fit the window exactly to the rendered content so there is no
+                // transparent dead space below the visible box. This lets the user
+                // position the overlay flush with the bottom of the screen.
+                let content_h = content_frame.response.rect.height();
+                if content_h > 10.0 {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                        egui::vec2(420.0 * s, content_h)
+                    ));
+                    // Write the rendered height for the tracker's position picker so it
+                    // can clamp/snap using the real overlay footprint instead of the
+                    // hardcoded constant.
+                    if (content_h - self.last_written_h).abs() > 1.0 {
+                        self.last_written_h = content_h;
+                        if let Some(dir) = dirs::data_local_dir() {
+                            let path = dir.join("poe2_guide").join("overlay_h.txt");
+                            let _ = std::fs::write(&path, content_h.to_string());
+                        }
+                    }
+                }
             });
 
         // ~20 fps — plenty for a step tracker and much lighter on resources than
