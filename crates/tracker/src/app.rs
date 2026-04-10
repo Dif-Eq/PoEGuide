@@ -1094,11 +1094,19 @@ impl eframe::App for GuideApp {
                             }
                         });
 
-                    // Version
+                    // Version + support link
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
                         ui.add_space(12.0);
                         ui.label(RichText::new(format!("v{VERSION}")).color(TEXT_DONE).size(11.0));
+                    });
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(12.0);
+                        ui.hyperlink_to(
+                            RichText::new("☕  Buy me a coffee").color(Color32::from_rgb(255, 200, 80)).size(13.0),
+                            "https://buymeacoffee.com/difeq",
+                        );
                     });
                     ui.add_space(8.0);
 
@@ -1188,6 +1196,24 @@ impl eframe::App for GuideApp {
                                 .stroke(Stroke::new(1.0, Color32::from_rgb(40, 50, 62)))
                                 .outer_margin(egui::Margin { left: 12, right: 12, top: 0, bottom: 4 })
                                 .show(ui, |ui| {
+                                    if zone.name == "TIP" {
+                                        // Tip zones: informational only, no checkboxes or progress
+                                        ui.label(RichText::new("Tips").color(ACCENT_GOLD).size(13.0).strong());
+                                        ui.add_space(4.0);
+                                        for step in zone.steps.iter() {
+                                            ui.horizontal(|ui| {
+                                                ui.add_space(4.0);
+                                                let text_width = ui.available_width();
+                                                ui.vertical(|ui| {
+                                                    ui.set_max_width(text_width);
+                                                    ui.label(RichText::new(format!("• {}", strip_tags(step))).color(TEXT_MAIN).size(13.0));
+                                                });
+                                            });
+                                            ui.add_space(2.0);
+                                        }
+                                        return;
+                                    }
+
                                     // Zone name
                                     let zone_done = zone.steps.iter().enumerate()
                                         .filter(|(si, _)| self.state.is_checked(act_idx, zi, *si))

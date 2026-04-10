@@ -59,6 +59,7 @@ impl SaveState {
         let mut done = 0;
         let mut total = 0;
         for (zi, zone) in act.zones.iter().enumerate() {
+            if zone.name == "TIP" { continue; }
             for (si, _) in zone.steps.iter().enumerate() {
                 total += 1;
                 if self.is_checked(act_idx, zi, si) {
@@ -71,6 +72,7 @@ impl SaveState {
 
     pub fn reset_act(&mut self, act_idx: usize, act: &Act) {
         for (zi, zone) in act.zones.iter().enumerate() {
+            if zone.name == "TIP" { continue; }
             for (si, _) in zone.steps.iter().enumerate() {
                 self.checks.remove(&Self::key(act_idx, zi, si));
             }
@@ -82,6 +84,7 @@ impl SaveState {
     pub fn first_unchecked(&self, acts: &[Act]) -> Option<(usize, usize, usize)> {
         for (ai, act) in acts.iter().enumerate() {
             for (zi, zone) in act.zones.iter().enumerate() {
+                if zone.name == "TIP" { continue; }
                 for (si, _) in zone.steps.iter().enumerate() {
                     if !self.is_checked(ai, zi, si) {
                         return Some((ai, zi, si));
@@ -101,6 +104,7 @@ impl SaveState {
 
         'outer: for (ai, act) in acts.iter().enumerate() {
             for (zi, zone) in act.zones.iter().enumerate() {
+                if zone.name == "TIP" { continue; }
                 for (si, _) in zone.steps.iter().enumerate() {
                     if !self.is_checked(ai, zi, si) {
                         collecting = true;
