@@ -5,7 +5,7 @@ This entire project was made using Claude AI. I don't know how to write anything
 
 ## Download
 
-Pre-built Windows binaries are available on the [Releases page](https://github.com/Dif-Eq/PoEGuide/releases). Download the latest release — `tracker.exe` is the main app, and `overlay.exe` is optional if you want the in-game overlay. No installation required.
+Pre-built Windows binaries are available on the [Releases page](https://github.com/Dif-Eq/PoEGuide/releases). Download `poe2-guide-windows.zip` and extract both files to the same folder. No installation required.
 
 ## Structure
 
@@ -31,7 +31,7 @@ Binaries will be at:
 
 Run **tracker.exe** as your main checklist — use it to review and check off steps.
 
-If desired, **overlay.exe** can be downloaded alongside the tracker UI.
+The zip includes **overlay.exe** — launch it from the "Open Overlay" button in the tracker UI.
 
 Both apps share the same save file (`%LOCALAPPDATA%\poe2_guide\progress.json`),
 so checking off a step in either one is reflected in the other within ~0.5 seconds.
