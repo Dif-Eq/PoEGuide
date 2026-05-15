@@ -24,12 +24,13 @@ jobs:
       - name: Build release
         run: cargo build --release
 
+      - name: Bundle release zip
+        run: Compress-Archive -Path target/release/tracker.exe,target/release/overlay.exe -DestinationPath poe2-guide-windows.zip
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            target/release/tracker.exe
-            target/release/overlay.exe
+          files: poe2-guide-windows.zip
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

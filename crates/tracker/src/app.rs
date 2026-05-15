@@ -268,14 +268,42 @@ impl GuideApp {
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("overlay.exe")));
 
-        if let Some(path) = overlay_path {
-            if path.exists() {
-                match std::process::Command::new(&path).spawn() {
-                    Ok(child) => { self.overlay_process = Some(child); }
-                    Err(e) => { eprintln!("Failed to launch overlay: {e}"); }
+        let Some(path) = overlay_path else { return };
+
+        if !path.exists() {
+            #[cfg(target_os = "windows")]
+            unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONWARNING, MB_OK};
+                use windows::Win32::Foundation::HWND;
+                use windows::core::w;
+                MessageBoxW(
+                    HWND(std::ptr::null_mut()),
+                    w!("overlay.exe was not found next to tracker.exe.\n\nMake sure both files are in the same folder."),
+                    w!("PoE2 Campaign Guide"),
+                    MB_OK | MB_ICONWARNING,
+                );
+            }
+            return;
+        }
+
+        match std::process::Command::new(&path).spawn() {
+            Ok(child) => { self.overlay_process = Some(child); }
+            Err(e) => {
+                #[cfg(target_os = "windows")]
+                unsafe {
+                    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONWARNING, MB_OK};
+                    use windows::Win32::Foundation::HWND;
+                    use windows::core::w;
+                    let msg: Vec<u16> = format!("Failed to launch overlay.exe:\n\n{e}\0")
+                        .encode_utf16().collect();
+                    MessageBoxW(
+                        HWND(std::ptr::null_mut()),
+                        windows::core::PCWSTR(msg.as_ptr()),
+                        w!("PoE2 Campaign Guide"),
+                        MB_OK | MB_ICONWARNING,
+                    );
                 }
-            } else {
-                eprintln!("overlay.exe not found at {}", path.display());
+                eprintln!("Failed to launch overlay: {e}");
             }
         }
     }
