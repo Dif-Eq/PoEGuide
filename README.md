@@ -38,9 +38,13 @@ The zip includes **overlay.exe** — launch it from the "Open Overlay" button in
 Both apps share the same save file (`%LOCALAPPDATA%\poe2_guide\progress.json`),
 so checking off a step in either one is reflected in the other within ~0.5 seconds.
 
+## Known Issues
+
+- **Overlay may not be click-through** — In rare cases the overlay can block mouse input to the game. This has not been consistently reproduced, but if it happens, close the overlay immediately. Avoid positioning the overlay over areas of the screen you frequently click during combat.
+
 ## Notes
 
-- The overlay requires **borderless windowed** mode in PoE2 to render on top.
+- The overlay requires **borderless windowed** mode, or any other non-fullscreen mode, in PoE2 to render on top.
 
 ## License
 
