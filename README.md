@@ -3,7 +3,7 @@ Path of Exile 1 support coming soon.
 
 This entire project was made using Claude AI. I don't know how to write anything in rust. I just like this UI library's features.
 
-For questions or bug reports, open a thread in [Discussions](https://github.com/Dif-Eq/PoEGuide/discussions) or reach out on Discord: **difeq**.
+For questions or bug reports, open a thread in [Discussions](https://github.com/Dif-Eq/PoEGuide/discussions) or reach out on Discord: **difeq**
 
 ## Download
 
